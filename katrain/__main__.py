@@ -96,6 +96,7 @@ from katrain.core.constants import (
 )
 from katrain.core.contribute_engine import KataGoContributeEngine
 from katrain.core.game import BaseGame, Game, IllegalMoveException, KaTrainSGF
+from katrain.gui.netgame import NetGameMixin
 from katrain.core.lang import DEFAULT_LANGUAGE, i18n
 from katrain.core.remote_engine import make_engine
 from katrain.gui.badukpan import AnalysisControls, BadukPanControls, BadukPanWidget  # noqa: F401
@@ -117,7 +118,7 @@ from katrain.gui.theme import Theme
 from katrain.gui.widgets.panels import PlayerSetupBlock
 
 
-class KaTrainGui(Screen, KaTrainBase):
+class KaTrainGui(NetGameMixin, Screen, KaTrainBase):
     """Top level class responsible for tying everything together"""
 
     zen = NumericProperty(0)
@@ -141,6 +142,7 @@ class KaTrainGui(Screen, KaTrainBase):
 
         self.animate_contributing = False
         self.message_queue = Queue()
+        self.net_init()  # sim-museum fork: two-player network Go via squeak
 
         self.last_key_down = None
         self.last_focus_event = 0
@@ -209,6 +211,7 @@ class KaTrainGui(Screen, KaTrainBase):
             self._do_new_game()
 
         Clock.schedule_interval(self.handle_animations, 0.1)
+        Clock.schedule_once(self.net_env_start, 3)  # network test hooks (KATRAIN_NET_*), inert when unset
         Window.request_keyboard(None, self, "").bind(on_key_down=self._on_keyboard_down, on_key_up=self._on_keyboard_up)
 
         def set_focus_event(*args):
@@ -332,7 +335,7 @@ class KaTrainGui(Screen, KaTrainBase):
             game, msg, args, kwargs = self.message_queue.get()
             try:
                 self.log(f"Message Loop Received {msg}: {args} for Game {game}", OUTPUT_EXTRA_DEBUG)
-                if game != self.game.game_id:
+                if game != self.game.game_id and msg != "net_message":  # network messages span new games
                     self.log(
                         f"Message skipped as it is outdated (current game is {self.game.game_id}", OUTPUT_EXTRA_DEBUG
                     )
@@ -373,6 +376,12 @@ class KaTrainGui(Screen, KaTrainBase):
                 self.message_queue.put([self.game.game_id, message, args, kwargs])
 
     def _do_new_game(self, move_tree=None, analyze_fast=False, sgf_filename=None):
+        if self.net_in_game:  # sim-museum fork: the host starts network games, colours swapped
+            if move_tree is None:
+                self.net_new_game_requested()
+            else:
+                self.net_status("Leave the network game (Network menu) before loading a game")
+            return
         self.pondering = False
         mode = self.play_analyze_mode
         if (move_tree is not None and mode == MODE_PLAY) or (move_tree is None and mode == MODE_ANALYZE):
@@ -437,6 +446,8 @@ class KaTrainGui(Screen, KaTrainBase):
         self.game.reset_current_analysis()
 
     def _do_resign(self):
+        if self.net_in_game:
+            return self.net_resign()
         self.game.current_node.end_state = f"{self.game.current_node.player}+R"
 
     def _do_redo(self, n_times=1):
@@ -459,9 +470,13 @@ class KaTrainGui(Screen, KaTrainBase):
 
     def _do_play(self, coords):
         self.board_gui.animating_pv = None
+        if self.net_in_game and not self.net_check_local_play():
+            return
         try:
             old_prisoner_count = self.game.prisoner_count["W"] + self.game.prisoner_count["B"]
             self.game.play(Move(coords, player=self.next_player_info.player))
+            if self.net_in_game:
+                self.net_after_local_play()
             if old_prisoner_count < self.game.prisoner_count["W"] + self.game.prisoner_count["B"]:
                 play_sound(Theme.CAPTURING_SOUND)
             elif not self.game.current_node.is_pass:
@@ -970,6 +985,7 @@ class KaTrainApp(App):
         if source == "keyboard":
             return True  # do not close on esc
         if getattr(self, "gui", None):
+            self.gui.net_leave()  # withdraw from squeak, tell the other player
             self.gui.play_mode.save_ui_state()
             self.gui._config["ui_state"]["size"] = list(Window._size)
             self.gui._config["ui_state"]["top"] = Window.top

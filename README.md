@@ -6,6 +6,15 @@
 [![PyPI Downloads](https://pepy.tech/badge/katrain)](https://pepy.tech/project/katrain)
 [![Discord](https://img.shields.io/discord/417022162348802048?logo=discord)](https://discord.com/channels/417022162348802048/629446365688365067)
 
+> **This is the [sim-museum](https://github.com/sim-museum) fork of KaTrain.** It adds **two-player network Go**:
+> main menu → *Network game (squeak)*. Host a game (board size, komi, rules and handicap come from your New Game
+> settings), or join one. Both players' KaTrains check every move. You can browse and analyse freely while you play,
+> and moves always land on the game's latest position. Games are found through
+> [squeak](https://github.com/sim-museum/squeak), the Serious Games Week matchmaker, once `sgw url
+> http://<matchmaker>:8090` is set; otherwise enter the host's address (TCP 47830). Go is squeak's Sunday game.
+> The changes live in `katrain/gui/netgame.py`, `katrain/core/netplay.py` and `katrain/core/squeak.py`, plus a few
+> hooks in `katrain/__main__.py`, so the fork stays easy to rebase onto upstream.
+
 KaTrain is a tool for analyzing games and playing go with AI feedback from KataGo:
 
 * Review your games to find the moves that were most costly in terms of points lost.
