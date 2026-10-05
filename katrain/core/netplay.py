@@ -4,7 +4,7 @@ The host listens and starts each game (board size, komi, rules, handicap and col
 connects. Both run KaTrain, so both boards check every move: moves travel as GTP coordinates with their move number,
 and a move the board cannot play ends the connection instead of letting the two games silently diverge.
 
-  guest -> host   {"t":"hello", "name":..., "version":...}
+  guest -> host   {"t":"hello", "name":..., "version":..., "build":...}   (build: $SGW_BUILD, the git commit)
   host  -> guest  {"t":"start", "name":..., "you":"B"|"W", "size":[x, y], "komi":..., "rules":..., "handicap":...}
   either way      {"t":"move", "n":<moves played before it>, "gtp":"Q16"|"pass"}
                   {"t":"resign"}  {"t":"chat", "text":...}  {"t":"bye"}
@@ -13,6 +13,7 @@ Sockets run on background threads; every message is handed to `on_message(dict)`
 it into a message-loop action, so game state is only ever touched from KaTrain's own message loop.
 """
 import json
+import os
 import socket
 import threading
 
@@ -24,6 +25,9 @@ class NetLink:
     def __init__(self, name, on_message):
         self.name = name
         self.on_message = on_message
+        # Backlog 28: the build this copy runs ($SGW_BUILD). A host that has one refuses a guest from a different (or
+        # unknown) build, so a game joined by address follows the same rule as the Serious Games Week matchmaker.
+        self.build = os.environ.get("SGW_BUILD", "").strip()
         self.is_host = False
         self.port = 0
         self.peer_name = ""
@@ -66,7 +70,7 @@ class NetLink:
         s = socket.create_connection((host, port), timeout=timeout)
         s.settimeout(None)
         self._attach(s)
-        self.send(t="hello", name=self.name, version=PROTOCOL)
+        self.send(t="hello", name=self.name, version=PROTOCOL, build=self.build)
 
     # ---- both ----
     def _attach(self, s):
@@ -94,6 +98,18 @@ class NetLink:
                     if msg.get("t") == "bye":
                         why = msg.get("why") or "%s left" % (self.peer_name or "the other player")
                         raise ConnectionError
+                    if msg.get("t") == "hello" and self.is_host and self.build:
+                        peer_build = str(msg.get("build") or "")[:64]
+                        if peer_build != self.build:
+                            try:
+                                s.sendall((json.dumps({"t": "bye", "why": "Different builds: this game runs %s and you run "
+                                                       "%s. Both players need the same build of KaTrain."
+                                                       % (self.build, peer_build or "an unknown build")}) + "\n").encode())
+                            except OSError:
+                                pass
+                            why = "Refused %s: a different build (%s)." % (str(msg.get("name", "Guest"))[:24],
+                                                                          peer_build or "unknown")
+                            raise ConnectionError
                     if msg.get("t") in ("hello", "start"):
                         self.peer_name = str(msg.get("name", "Guest" if self.is_host else "Host"))[:24]
                     self.on_message(msg)
