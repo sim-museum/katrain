@@ -1,4 +1,4 @@
-"""Two-player network Go, found through squeak (the Serious Games Week matchmaker) -- sim-museum fork of KaTrain.
+"""Two-player network Go, found through the Serious Games Week matchmaker -- sim-museum fork of KaTrain.
 
 A mixin for KaTrainGui: hosting and joining, the Network popup, and the message-loop actions that keep the two
 boards in step. Both players are human on both screens (KaTrain's AI never moves for the remote colour, and
@@ -6,7 +6,7 @@ teaching auto-undo is off), and `net_tip` is the last move of the network game: 
 analyse freely, but you play, and remote moves land, at the tip.
 
 Test hooks (each instance needs its own HOME): KATRAIN_NET_HOST=<port> [KATRAIN_NET_COLOUR=B|W],
-KATRAIN_NET_JOIN=<host:port>|squeak, KATRAIN_NET_NAME, KATRAIN_NET_SCRIPT="D4 Q16 ..." (the whole game; each side
+KATRAIN_NET_JOIN=<host:port>|matchmaker, KATRAIN_NET_NAME, KATRAIN_NET_SCRIPT="D4 Q16 ..." (the whole game; each side
 plays the entries that fall on its turns), KATRAIN_NET_EXIT_PLIES=<n> (print the game and exit once n moves are
 played) and KATRAIN_NET_TIMEOUT=<s> (exit regardless).
 """
@@ -27,7 +27,7 @@ from kivy.uix.spinner import Spinner
 from kivy.uix.textinput import TextInput
 from pysgf import Move
 
-from katrain.core import squeak
+from katrain.core import serious_games_week
 from katrain.core.constants import MODE_ANALYZE, PLAYER_HUMAN, PLAYING_NORMAL, STATUS_ERROR, STATUS_INFO, VERSION
 from katrain.core.netplay import DEFAULT_PORT, NetLink
 
@@ -73,14 +73,14 @@ class NetGameMixin:
         self.net, self.net_host_colour = link, colour
         self._net_announce()
         listed = self.net_announcer and self.net_announcer.proc
-        why = "" if listed or not squeak.configured() else " (not on squeak: %s)" % self.net_announcer.last_message
+        why = "" if listed or not serious_games_week.configured() else " (not on Serious Games Week: %s)" % self.net_announcer.last_message
         self.net_status("Hosting a Go game on TCP %d%s -- waiting for an opponent" % (
-            link.port, " (listed on squeak)" if listed else why))
+            link.port, " (listed on Serious Games Week)" if listed else why))
         return True
 
     def _net_announce(self):
         if self.net_announcer is None:
-            self.net_announcer = squeak.Announcer()
+            self.net_announcer = serious_games_week.Announcer()
             atexit.register(self.net_announcer.stop)
         sz = self.config("game/size")
         self.net_announcer.start(self.net.port, "%s's Go game (%s)" % (self.net.name, sz), name=self.net.name,
@@ -266,16 +266,16 @@ class NetGameMixin:
         host_btn = Button(text="Host", size_hint_x=0.25)
         row(lbl("Host: TCP port", size_hint_x=0.3), hport, colour, host_btn)
         row(lbl("Board size, komi, rules and handicap come from the host's New Game settings. "
-                + ("Hosted games are listed on squeak while they wait." if squeak.configured() else
-                   "No squeak matchmaker is set up (sgw url ...): give your opponent this computer's address."),
+                + ("Hosted games are listed on Serious Games Week while they wait." if serious_games_week.configured() else
+                   "No Serious Games Week matchmaker is set up (sgw url ...): give your opponent this computer's address."),
                 font_size="12sp", text_size=(dp(560), None)), h=44)
         games = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(2))
         games.bind(minimum_height=games.setter("height"))
         sv = ScrollView(size_hint_y=None, height=dp(110))
         sv.add_widget(games)
-        if squeak.configured():
+        if serious_games_week.configured():
             refresh = Button(text="Refresh", size_hint_x=0.25)
-            row(lbl("Games on squeak"), refresh)
+            row(lbl("Games on Serious Games Week"), refresh)
             root.add_widget(sv)
         jhost = TextInput(text="127.0.0.1", multiline=False)
         jport = TextInput(text=str(DEFAULT_PORT), multiline=False, input_filter="int", size_hint_x=0.25)
@@ -286,7 +286,7 @@ class NetGameMixin:
         leave_btn = Button(text="Leave the network game", disabled=self.net is None)
         close_btn = Button(text="Close")
         row(leave_btn, close_btn)
-        popup = Popup(title="Network game (squeak)", content=root, size_hint=(None, None), size=(dp(620), dp(560)))
+        popup = Popup(title="Network game", content=root, size_hint=(None, None), size=(dp(620), dp(560)))
         self.net_popup = popup
 
         def fill(found):
@@ -298,15 +298,15 @@ class NetGameMixin:
                                                    setattr(jport, "text", str(g["port"]))))
                 games.add_widget(b)
             if not found:
-                games.add_widget(Label(text="(no open games on squeak right now)", size_hint_y=None, height=dp(32)))
+                games.add_widget(Label(text="(no open games on Serious Games Week right now)", size_hint_y=None, height=dp(32)))
             elif self.net is None:
                 jhost.text, jport.text = found[0]["host"], str(found[0]["port"])
 
         def do_refresh(*_a):
             threading.Thread(target=lambda: (lambda f: Clock.schedule_once(lambda _dt: fill(f), 0))(
-                squeak.list_tables()), daemon=True).start()
+                serious_games_week.list_tables()), daemon=True).start()
 
-        if squeak.configured():
+        if serious_games_week.configured():
             refresh.bind(on_release=do_refresh)
             do_refresh()
         host_btn.bind(on_release=lambda *_a: (popup.dismiss(), self.net_host(
@@ -336,13 +336,13 @@ class NetGameMixin:
             self.net_host(name or "Host", int(os.environ["KATRAIN_NET_HOST"]), os.environ.get("KATRAIN_NET_COLOUR", "B"))
         elif os.environ.get("KATRAIN_NET_JOIN"):
             target = os.environ["KATRAIN_NET_JOIN"]
-            if target == "squeak":
-                found = squeak.list_tables()
+            if target == "matchmaker":
+                found = serious_games_week.list_tables()
                 if not found:
-                    _trace("join: no games on squeak")
+                    _trace("join: no games on the matchmaker")
                     os._exit(3)
                 host, port = found[0]["host"], found[0]["port"]
-                _trace("join: squeak lists %d game(s); joining %s at %s:%d" % (len(found), found[0].get("title"),
+                _trace("join: the matchmaker lists %d game(s); joining %s at %s:%d" % (len(found), found[0].get("title"),
                                                                                host, port))
             else:
                 host, port = target.rsplit(":", 1)

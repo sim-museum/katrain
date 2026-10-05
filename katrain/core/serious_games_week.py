@@ -1,7 +1,7 @@
-"""squeak (Serious Games Week) matchmaker integration for KaTrain (the sim-museum fork).
+"""Serious Games Week matchmaker integration for KaTrain (the sim-museum fork).
 
-squeak is an iGOR-style lobby the PLAYER chooses: `sgw url http://<matchmaker>:8090` (or $SGW_URL). KaTrain talks to it
-through the `sgw` client (github.com/sim-museum/squeak), never directly, the same way MiG Alley, Battle of Britain and
+Serious Games Week is an iGOR-style lobby the PLAYER chooses: `sgw url http://<matchmaker>:8090` (or $SGW_URL). KaTrain talks to it
+through the `sgw` client (github.com/sim-museum/serious-games-week), never directly, the same way MiG Alley, Battle of Britain and
 FreeFalcon do:
 
   hosting -> `sgw announce --game katrain ...` runs for as long as the table is open; its stdin is a pipe we hold, so
@@ -10,7 +10,7 @@ FreeFalcon do:
              `last_message` says why.
   joining -> `sgw list --game katrain --json` gives the open games for the join dialog.
 
-Everything here is inert unless a matchmaker is configured. SQUEAK_OFF=1 disables it.
+Everything here is inert unless a matchmaker is configured. SGW_OFF=1 disables it.
 """
 import json
 import os
@@ -23,7 +23,7 @@ GAME_ID = "katrain"
 
 
 def configured():
-    if os.environ.get("SQUEAK_OFF"):
+    if os.environ.get("SGW_OFF"):
         return False
     if os.environ.get("SGW_URL"):
         return True
@@ -35,11 +35,11 @@ def configured():
 
 
 def find_sgw():
-    """The sgw command line: $SGW_BIN, the AppImage's own, ~/sgweek/sgw.py, ~/squeak/sgw.py, or `sgw` on PATH."""
+    """The sgw command line: $SGW_BIN, the AppImage's own, ~/sgweek/sgw.py, ~/serious-games-week/sgw.py, or `sgw` on PATH."""
     cands = [os.environ.get("SGW_BIN")]
     if os.environ.get("APPDIR"):
         cands.append(os.path.join(os.environ["APPDIR"], "usr", "bin", "sgw"))
-    cands += [os.path.expanduser("~/sgweek/sgw.py"), os.path.expanduser("~/squeak/sgw.py")]
+    cands += [os.path.expanduser("~/sgweek/sgw.py"), os.path.expanduser("~/serious-games-week/sgw.py")]
     for c in cands:
         if c and os.path.isfile(c):
             return [sys.executable, c] if c.endswith(".py") else [c]
@@ -59,7 +59,7 @@ class Announcer:
             return False
         cmd = find_sgw()
         if not cmd:
-            self.last_message = "squeak: no sgw client found"
+            self.last_message = "Serious Games Week: no sgw client found"
             return False
         args = cmd + ["announce", "--game", GAME_ID, "--port", str(int(port)), "--title", title or "KaTrain game",
                       "--max", str(int(max_players or 0))]
@@ -71,7 +71,7 @@ class Announcer:
             self.proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                          stderr=subprocess.STDOUT, text=True)
         except OSError as e:
-            self.last_message = "squeak: %s" % e
+            self.last_message = "Serious Games Week: %s" % e
             return False
         threading.Thread(target=self._read, daemon=True).start()
         return True
@@ -81,7 +81,7 @@ class Announcer:
             line = line.strip()
             if line:
                 self.last_message = line
-                print("[squeak] " + line, flush=True)
+                print("[sgw] " + line, flush=True)
 
     def stop(self):
         if not self.proc:

@@ -142,7 +142,7 @@ class KaTrainGui(NetGameMixin, Screen, KaTrainBase):
 
         self.animate_contributing = False
         self.message_queue = Queue()
-        self.net_init()  # sim-museum fork: two-player network Go via squeak
+        self.net_init()  # sim-museum fork: two-player network Go via the Serious Games Week matchmaker
 
         self.last_key_down = None
         self.last_focus_event = 0
@@ -985,7 +985,7 @@ class KaTrainApp(App):
         if source == "keyboard":
             return True  # do not close on esc
         if getattr(self, "gui", None):
-            self.gui.net_leave()  # withdraw from squeak, tell the other player
+            self.gui.net_leave()  # withdraw from the matchmaker, tell the other player
             self.gui.play_mode.save_ui_state()
             self.gui._config["ui_state"]["size"] = list(Window._size)
             self.gui._config["ui_state"]["top"] = Window.top
