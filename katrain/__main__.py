@@ -97,6 +97,7 @@ from katrain.core.constants import (
 from katrain.core.contribute_engine import KataGoContributeEngine
 from katrain.core.game import BaseGame, Game, IllegalMoveException, KaTrainSGF
 from katrain.gui.netgame import NetGameMixin
+from katrain.gui.learn import LearnMixin
 from katrain.core.lang import DEFAULT_LANGUAGE, i18n
 from katrain.core.remote_engine import make_engine
 from katrain.gui.badukpan import AnalysisControls, BadukPanControls, BadukPanWidget  # noqa: F401
@@ -118,7 +119,7 @@ from katrain.gui.theme import Theme
 from katrain.gui.widgets.panels import PlayerSetupBlock
 
 
-class KaTrainGui(NetGameMixin, Screen, KaTrainBase):
+class KaTrainGui(NetGameMixin, LearnMixin, Screen, KaTrainBase):
     """Top level class responsible for tying everything together"""
 
     zen = NumericProperty(0)
@@ -212,6 +213,7 @@ class KaTrainGui(NetGameMixin, Screen, KaTrainBase):
 
         Clock.schedule_interval(self.handle_animations, 0.1)
         Clock.schedule_once(self.net_env_start, 3)  # network test hooks (KATRAIN_NET_*), inert when unset
+        Clock.schedule_once(self.learn_env_start, 4)  # Learn test hooks (KATRAIN_LEARN_*), inert when unset
         Window.request_keyboard(None, self, "").bind(on_key_down=self._on_keyboard_down, on_key_up=self._on_keyboard_up)
 
         def set_focus_event(*args):

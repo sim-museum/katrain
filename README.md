@@ -14,6 +14,13 @@
 > http://<matchmaker>:8090` is set; otherwise enter the host's address (TCP 47830). Go is Serious Games Week's Sunday game.
 > The changes live in `katrain/gui/netgame.py`, `katrain/core/netplay.py` and `katrain/core/serious_games_week.py`, plus a few
 > hooks in `katrain/__main__.py`, so the fork stays easy to rebase onto upstream.
+>
+> It also adds **lessons and Go problems**: main menu → *Learn: lessons and problems*. The ten lessons are q5Go's
+> tutorial (the rules, life and death, tactics, connections, captures, openings, endgame, terminology); each step is
+> explained in the comments. The problems are Go Game Guru's Weekly Go Problems (easy, intermediate, hard; 420) and
+> the 347 problems of the Xuanxuan Qijing (1349). A problem opens with its solution hidden: place your answer and
+> KataGo shows how good it is, or press *Show solution*. Sources and licences: `katrain/learn/SOURCES.md`; code in
+> `katrain/gui/learn.py` and `katrain/core/learn.py`.
 
 KaTrain is a tool for analyzing games and playing go with AI feedback from KataGo:
 
