@@ -40,3 +40,21 @@ class ShapeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NodeShapeTest(unittest.TestCase):
+    """The names reach KaTrain's move info, computed from the game tree (captures included)."""
+
+    def test_names_along_a_game(self):
+        from katrain.core.game import KaTrainSGF
+        from katrain.core.shapes import node_shape_name
+
+        root = KaTrainSGF.parse_sgf("(;GM[1]SZ[19];B[pd];W[dp];B[pq];W[dd];B[qo];W[qp];B[pp];W[rq];B[qq];W[rr];B[rp];W[qr])")
+        names, n = [], root
+        while n.children:
+            n = n.children[0]
+            names.append(node_shape_name(n))
+        self.assertEqual(names, ["4-4 Point", "4-4 Point", "3-4 Point", "Nirensei Opening", "Low Enclosure", "Attachment",
+                                 "Stretch", "Diagonal", "Atari", "Stretch", "Take", "Turn"])
+        self.assertTrue(n.parent.comment(interactive=False).startswith("Take\n"))   # on screen, even before analysis
+        self.assertNotIn("Take", n.parent.comment(sgf=True, interactive=False))   # saved SGF comments unchanged

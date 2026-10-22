@@ -138,3 +138,60 @@ def name_move(data, sign, vertex):
     if any((x, y) == hp for hp in _unnamed_hoshis(w, h)):
         return "Hoshi"
     return None
+
+
+def _play(data, x, y, sign):
+    """Put a stone (row 0 = top) and take the opposing chains it leaves without liberties."""
+    h, w = len(data), len(data[0])
+    data[y][x] = sign
+    for n in _neighbors((x, y), w, h):
+        if data[n[1]][n[0]] != -sign:
+            continue
+        chain, todo, libs = {n}, [n], False
+        while todo and not libs:
+            c = todo.pop()
+            for m in _neighbors(c, w, h):
+                s = data[m[1]][m[0]]
+                if s == 0:
+                    libs = True
+                    break
+                if s == -sign and m not in chain:
+                    chain.add(m)
+                    todo.append(m)
+        if not libs:
+            for cx, cy in chain:
+                data[cy][cx] = 0
+
+
+def board_before(node):
+    """The position before `node`'s move, as data[y][x] with row 0 at the top (KaTrain's row 0 is the bottom)."""
+    w, h = node.board_size
+    data = [[0] * w for _ in range(h)]
+    for n in node.parent.nodes_from_root if node.parent else []:
+        for m in n.clear_placements:
+            if m.coords:
+                data[h - 1 - m.coords[1]][m.coords[0]] = 0
+        for m in n.placements:
+            if m.coords:
+                data[h - 1 - m.coords[1]][m.coords[0]] = 1 if m.player == "B" else -1
+        for m in n.moves:
+            if m.coords:
+                _play(data, m.coords[0], h - 1 - m.coords[1], 1 if m.player == "B" else -1)
+    return data
+
+
+def node_shape_name(node):
+    """Sabaki's name for the move at `node` ("Hane", "Atari" ...), or None; cached on the node."""
+    cached = getattr(node, "_shape_name", False)
+    if cached is not False:
+        return cached
+    m, name = node.move, None
+    if m is not None and node.parent is not None:
+        try:
+            w, h = node.board_size
+            name = name_move(board_before(node), 1 if m.player == "B" else -1,
+                             None if m.coords is None else (m.coords[0], h - 1 - m.coords[1]))
+        except Exception:   # a display nicety: never break the info panel
+            name = None
+    node._shape_name = name
+    return name

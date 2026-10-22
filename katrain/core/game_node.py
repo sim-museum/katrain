@@ -335,7 +335,14 @@ class GameNode(BaseGoNode["GameNode"]):
                 return f"{i18n._('komi')}: {self.komi:.1f}\n{i18n._('ruleset')}: {rules}\n"
             return ""
 
-        text = i18n._("move").format(number=self.depth) + f": {single_move.player} {single_move.gtp()}\n"
+        text = i18n._("move").format(number=self.depth) + f": {single_move.player} {single_move.gtp()}"
+        shape = None
+        if not sgf:   # GO-SHAPE-1: the shape name, as Sabaki shows it (screen only -- saved SGF comments are unchanged)
+            from katrain.core.shapes import node_shape_name
+
+            shape = node_shape_name(self)
+            text += f"  ({shape})" if shape else ""
+        text += "\n"
         if self.analysis_exists:
             score = self.score
             if sgf:
@@ -378,6 +385,8 @@ class GameNode(BaseGoNode["GameNode"]):
                     text += i18n._("Info:undo predicted PV").format(pv=f"{self.next_player}{' '.join(top_pv)}") + "\n"
         else:
             text = i18n._("No analysis available") if sgf else i18n._("Analyzing move...")
+            if shape:
+                text = f"{shape}\n" + text
 
         if self.ai_thoughts and (sgf or details):
             text += "\n" + i18n._("Info:AI thoughts").format(thoughts=self.ai_thoughts)
