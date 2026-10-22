@@ -4,7 +4,8 @@ The host listens and starts each game (board size, komi, rules, handicap and col
 connects. Both run KaTrain, so both boards check every move: moves travel as GTP coordinates with their move number,
 and a move the board cannot play ends the connection instead of letting the two games silently diverge.
 
-  guest -> host   {"t":"hello", "name":..., "version":..., "build":...}   (build: $SGW_BUILD, the git commit)
+  guest -> host   {"t":"hello", "name":..., "version":..., "build":..., "pw":...}   (build: $SGW_BUILD, the git commit;
+                  pw: SHA-256 of the game password, "" = none -- backlog 55)
   host  -> guest  {"t":"start", "name":..., "you":"B"|"W", "size":[x, y], "komi":..., "rules":..., "handicap":...}
   either way      {"t":"move", "n":<moves played before it>, "gtp":"Q16"|"pass"}
                   {"t":"resign"}  {"t":"chat", "text":...}  {"t":"bye"}
@@ -12,6 +13,7 @@ and a move the board cannot play ends the connection instead of letting the two 
 Sockets run on background threads; every message is handed to `on_message(dict)` on that thread, and KaTrain turns
 it into a message-loop action, so game state is only ever touched from KaTrain's own message loop.
 """
+import hashlib
 import json
 import os
 import socket
@@ -21,9 +23,18 @@ DEFAULT_PORT = 47830
 PROTOCOL = 1
 
 
+def password_hash(text):
+    """Backlog 55: the password travels as a SHA-256, never as text; a blank password is "" (an open game)."""
+    text = (text or "").strip()
+    return hashlib.sha256(text.encode("utf-8")).hexdigest() if text else ""
+
+
 class NetLink:
-    def __init__(self, name, on_message):
+    def __init__(self, name, on_message, password=""):
         self.name = name
+        # Backlog 55 (PO 10-20): an optional game password, the same rules as the other Serious Games Week games: a host
+        # with one takes only a guest with the same one; a host without one runs an open game and takes anyone.
+        self.pw = password_hash(password)
         self.on_message = on_message
         # Backlog 28: the build this copy runs ($SGW_BUILD). A host that has one refuses a guest from a different (or
         # unknown) build, so a game joined by address follows the same rule as the Serious Games Week matchmaker.
@@ -70,7 +81,7 @@ class NetLink:
         s = socket.create_connection((host, port), timeout=timeout)
         s.settimeout(None)
         self._attach(s)
-        self.send(t="hello", name=self.name, version=PROTOCOL, build=self.build)
+        self.send(t="hello", name=self.name, version=PROTOCOL, build=self.build, pw=self.pw)
 
     # ---- both ----
     def _attach(self, s):
@@ -110,6 +121,14 @@ class NetLink:
                             why = "Refused %s: a different build (%s)." % (str(msg.get("name", "Guest"))[:24],
                                                                           peer_build or "unknown")
                             raise ConnectionError
+                    if msg.get("t") == "hello" and self.is_host and self.pw and str(msg.get("pw") or "") != self.pw:
+                        try:
+                            s.sendall((json.dumps({"t": "bye", "why": "Wrong password for this game." if msg.get("pw")
+                                                   else "This game needs a password."}) + "\n").encode())
+                        except OSError:
+                            pass
+                        why = "Refused %s: wrong password." % str(msg.get("name", "Guest"))[:24]
+                        raise ConnectionError
                     if msg.get("t") in ("hello", "start"):
                         self.peer_name = str(msg.get("name", "Guest" if self.is_host else "Host"))[:24]
                     self.on_message(msg)

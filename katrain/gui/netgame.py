@@ -8,7 +8,7 @@ analyse freely, but you play, and remote moves land, at the tip.
 Test hooks (each instance needs its own HOME): KATRAIN_NET_HOST=<port> [KATRAIN_NET_COLOUR=B|W],
 KATRAIN_NET_JOIN=<host:port>|matchmaker, KATRAIN_NET_NAME, KATRAIN_NET_SCRIPT="D4 Q16 ..." (the whole game; each side
 plays the entries that fall on its turns), KATRAIN_NET_EXIT_PLIES=<n> (print the game and exit once n moves are
-played) and KATRAIN_NET_TIMEOUT=<s> (exit regardless).
+played), KATRAIN_NET_TIMEOUT=<s> (exit regardless) and KATRAIN_NET_PASSWORD (the game password, backlog 55).
 """
 import atexit
 import os
@@ -62,9 +62,9 @@ class NetGameMixin:
                                                                      check_level=False), -1)
 
     # ---------------- hosting / joining (main thread) ----------------
-    def net_host(self, name, port=DEFAULT_PORT, colour="B"):
+    def net_host(self, name, port=DEFAULT_PORT, colour="B", password=""):
         self.net_leave()
-        link = NetLink(name or "Host", self._net_received)
+        link = NetLink(name or "Host", self._net_received, password=password)
         try:
             link.host(int(port))
         except OSError as e:
@@ -86,9 +86,9 @@ class NetGameMixin:
         self.net_announcer.start(self.net.port, "%s's Go game (%s)" % (self.net.name, sz), name=self.net.name,
                                  max_players=2, version=VERSION)
 
-    def net_join(self, name, host, port=DEFAULT_PORT):
+    def net_join(self, name, host, port=DEFAULT_PORT, password=""):
         self.net_leave()
-        link = NetLink(name or "Guest", self._net_received)
+        link = NetLink(name or "Guest", self._net_received, password=password)
         try:
             link.join(host, int(port))
         except OSError as e:
@@ -261,6 +261,9 @@ class NetGameMixin:
         row(lbl("[b]%s[/b]" % state, markup=True))
         name = TextInput(text=self.net.name if self.net else default_name, multiline=False)
         row(lbl("Your name", size_hint_x=0.35), name)
+        # Backlog 55: optional; the host's password (blank = an open game) or the one a guest was given. Not saved.
+        pw = TextInput(text="", multiline=False, password=True, hint_text="optional -- blank = open game")
+        row(lbl("Game password", size_hint_x=0.35), pw)
         hport = TextInput(text=str(DEFAULT_PORT), multiline=False, input_filter="int", size_hint_x=0.25)
         colour = Spinner(text="Black", values=("Black", "White", "Random"), size_hint_x=0.3)
         host_btn = Button(text="Host", size_hint_x=0.25)
@@ -286,7 +289,7 @@ class NetGameMixin:
         leave_btn = Button(text="Leave the network game", disabled=self.net is None)
         close_btn = Button(text="Close")
         row(leave_btn, close_btn)
-        popup = Popup(title="Network game", content=root, size_hint=(None, None), size=(dp(620), dp(560)))
+        popup = Popup(title="Network game", content=root, size_hint=(None, None), size=(dp(620), dp(600)))
         self.net_popup = popup
 
         def fill(found):
@@ -310,9 +313,9 @@ class NetGameMixin:
             refresh.bind(on_release=do_refresh)
             do_refresh()
         host_btn.bind(on_release=lambda *_a: (popup.dismiss(), self.net_host(
-            name.text.strip(), hport.text or DEFAULT_PORT, {"Black": "B", "White": "W"}.get(colour.text, "R"))))
+            name.text.strip(), hport.text or DEFAULT_PORT, {"Black": "B", "White": "W"}.get(colour.text, "R"), pw.text)))
         join_btn.bind(on_release=lambda *_a: (popup.dismiss(), threading.Thread(
-            target=self.net_join, args=(name.text.strip(), jhost.text.strip(), jport.text or DEFAULT_PORT),
+            target=self.net_join, args=(name.text.strip(), jhost.text.strip(), jport.text or DEFAULT_PORT, pw.text),
             daemon=True).start()))
         chat.bind(on_text_validate=lambda ti: (self.net_chat(ti.text.strip()) if ti.text.strip() else None,
                                                setattr(ti, "text", "")))
@@ -333,7 +336,8 @@ class NetGameMixin:
                                              os._exit(0)), 6)
             return
         if os.environ.get("KATRAIN_NET_HOST"):
-            self.net_host(name or "Host", int(os.environ["KATRAIN_NET_HOST"]), os.environ.get("KATRAIN_NET_COLOUR", "B"))
+            self.net_host(name or "Host", int(os.environ["KATRAIN_NET_HOST"]), os.environ.get("KATRAIN_NET_COLOUR", "B"),
+                          os.environ.get("KATRAIN_NET_PASSWORD", ""))
         elif os.environ.get("KATRAIN_NET_JOIN"):
             target = os.environ["KATRAIN_NET_JOIN"]
             if target == "matchmaker":
@@ -346,7 +350,7 @@ class NetGameMixin:
                                                                                host, port))
             else:
                 host, port = target.rsplit(":", 1)
-            self.net_join(name or "Guest", host, int(port))
+            self.net_join(name or "Guest", host, int(port), os.environ.get("KATRAIN_NET_PASSWORD", ""))
         else:
             return
         script = os.environ.get("KATRAIN_NET_SCRIPT", "").split()
