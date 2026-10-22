@@ -642,6 +642,29 @@ class KaTrainGui(NetGameMixin, LearnMixin, Screen, KaTrainBase):
         except Exception as e:
             self.log(f"Failed to save SGF to {filename}: {e}", OUTPUT_ERROR)
 
+    def _do_review_in_sabaki(self):
+        """GO-SHAPE-1/GO-SABAKI-1 (PO 10-22): open this game in Sabaki for the post-game review -- its variation tree
+        browses the lines off the game actually played, and it names each move's shape. run_katrain.sh sets
+        KATRAIN_SABAKI to its sabaki.sh (which configures KataGo in Sabaki and finds the AppImage)."""
+        import subprocess
+
+        sabaki = os.environ.get("KATRAIN_SABAKI", "")
+        if not sabaki or not os.path.exists(sabaki):
+            self.controls.set_status("Sabaki is not set up (start KaTrain with run_katrain.sh)", STATUS_ERROR,
+                                     check_level=False)
+            return
+        folder = os.path.join(os.path.expanduser("~"), ".katrain", "sabaki-review")
+        os.makedirs(folder, exist_ok=True)
+        filename = os.path.join(folder, self.game.generate_filename())
+        try:
+            self.game.write_sgf(filename)
+            subprocess.Popen([sabaki, filename], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+        except Exception as e:
+            self.controls.set_status(f"Could not open Sabaki: {e}", STATUS_ERROR, check_level=False)
+            return
+        self.controls.set_status(f"Opened in Sabaki: {filename}", STATUS_INFO, check_level=False)
+
     def _do_save_game_as_popup(self):
         popup_contents = SaveSGFPopup(suggested_filename=self.game.generate_filename())
         save_game_popup = I18NPopup(
