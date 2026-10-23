@@ -1,7 +1,7 @@
 """GO-PROBLEM-1 engine check (needs KataGo; not a unit test).
 
 For each problem: KataGo's top move on the bare position, as Learn opened problems before (whole-board analysis), and
-on the framed position with moves outside the region avoided, as Learn opens them now. Reports whether the top move
+on the framed position alone, and framed with moves outside the region avoided (KaTrain's Tsumego frame). Reports whether the top move
 is inside the problem area and whether it is a supplied correct first move.
 usage: problem_local_check.py katago model cfg set:first-last [set:first-last ...] [--visits N]
 """
@@ -36,7 +36,8 @@ def main():
     specs = [a for a in sys.argv[4:] if ":" in a]
     proc = subprocess.Popen([katago, "analysis", "-model", model, "-config", cfg], stdin=subprocess.PIPE,
                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-    totals = {"bare_local": 0, "bare_book": 0, "framed_local": 0, "framed_book": 0, "n": 0}
+    totals = {"bare_local": 0, "bare_book": 0, "frameonly_local": 0, "frameonly_book": 0, "framed_local": 0,
+              "framed_book": 0, "n": 0}
     for spec in specs:
         set_id, rng = spec.split(":")
         lo, hi = (int(x) for x in rng.split("-"))
@@ -57,7 +58,7 @@ def main():
             avoid = [Move((x, y)).gtp() for x in range(sx) for y in range(sy)
                      if not (jmin <= x <= jmax and imin <= y <= imax)]
             res = {}
-            for tag, st, extra in (("bare", stones, {}),
+            for tag, st, extra in (("bare", stones, {}), ("frameonly", framed, {}),
                                    ("framed", framed, {"avoidMoves": [{"player": player, "moves": avoid,
                                                                        "untilDepth": 1}]})):
                 q = {"id": tag, "initialStones": [[p, Move(c).gtp()] for p, c in st], "moves": [],
@@ -71,7 +72,7 @@ def main():
             book = book_moves(path, root.board_size)
             line = [f"{set_id}:{idx} {player} book={','.join(sorted(book))}"]
             totals["n"] += 1
-            for tag in ("bare", "framed"):
+            for tag in ("bare", "frameonly", "framed"):
                 mv, pv, sc = res[tag]
                 c = Move.from_gtp(mv).coords
                 local = c is not None and area[0] <= c[0] <= area[1] and area[2] <= c[1] <= area[3]
@@ -84,7 +85,8 @@ def main():
     proc.wait(timeout=30)
     n = totals["n"]
     print(f"[problems] n={n} bare: local {totals['bare_local']} book {totals['bare_book']}  "
-          f"framed: local {totals['framed_local']} book {totals['framed_book']}")
+          f"frame only: local {totals['frameonly_local']} book {totals['frameonly_book']}  "
+          f"framed + region: local {totals['framed_local']} book {totals['framed_book']}")
 
 
 if __name__ == "__main__":

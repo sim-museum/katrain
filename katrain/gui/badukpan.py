@@ -1074,8 +1074,10 @@ class BadukPanWidget(Widget):
                     up_to_move = self.get_animate_pv_index()
                     self.draw_pv(pv, node, up_to_move)
 
-                if getattr(self.katrain.game, "region_of_interest", None):
-                    self.draw_roi_box(self.katrain.game.region_of_interest, width=dp(1.25))
+                roi = getattr(self.katrain.game, "region_of_interest", None) or getattr(
+                    self.katrain.game.root, "problem_region", None)  # GO-PROBLEM-1: show a problem's area too
+                if roi:
+                    self.draw_roi_box(roi, width=dp(1.25))
 
             # pass circle
             if current_node.is_pass or game_ended:

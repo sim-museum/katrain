@@ -433,6 +433,7 @@ class KaTrainGui(NetGameMixin, LearnMixin, Screen, KaTrainBase):
             settings = self.config(f"ai/{mode}")
             if settings is not None:
                 generate_ai_move(self.game, mode, settings)
+                self.learn_after_ai_move()  # GO-PROBLEM-1: a pass in a go problem ends it
             else:
                 self.log(f"AI Mode {mode} not found!", OUTPUT_ERROR)
 

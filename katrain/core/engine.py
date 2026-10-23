@@ -483,8 +483,10 @@ class KataGoEngine(BaseEngine):
                     "untilDepth": 1,
                 }
             ]
-        elif region_of_interest:
-            xmin, xmax, ymin, ymax = region_of_interest
+        elif region_of_interest or getattr(analysis_node.root, "problem_region", None):
+            # GO-PROBLEM-1: a go problem (Learn) keeps every query inside the problem's region, as a normal query --
+            # unlike a region of interest, its root score stands, so points lost, hints and teaching mode work
+            xmin, xmax, ymin, ymax = region_of_interest or analysis_node.root.problem_region
             avoid = [
                 {
                     "moves": [
