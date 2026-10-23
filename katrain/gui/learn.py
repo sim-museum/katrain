@@ -30,6 +30,8 @@ from katrain.core.constants import (AI_DEFAULT, MODE_PLAY, PLAYER_AI, PLAYER_HUM
 from katrain.core.tsumego_frame import tsumego_frame_from_katrain_game
 
 FRAME_MARGIN = 4  # the Tsumego frame popup's default wall distance
+CENTRE_EDGE = 2  # stones all further than this from every edge: an open-centre problem, not framed
+CENTRE_MARGIN = 3  # its region: the stones' area and this many lines around it
 SOLUTION_VISITS = 4  # x the engine's max visits for the start position: KaTrain's own solution
 SOLUTION_MOVES = 12
 SOLVED_POINTS = 1.5  # the solver's moves may lose this much in all against KaTrain's reading and still count as solved
@@ -90,12 +92,22 @@ class LearnMixin:
     def _learn_frame_problem(self):
         root = self.game.root
         to_play = root.initial_player
-        node, region = tsumego_frame_from_katrain_game(self.game, self.game.komi, to_play == "B", ko_p=False,
-                                                       margin=FRAME_MARGIN)
-        if region:
-            (x1, x2), (y1, y2) = region
-            root.problem_region = [min(x1, x2), max(x1, x2), min(y1, y2), max(y1, y2)]
-        self.game.set_current_node(node)
+        (sx, sy), stones = root.board_size, [m.coords for m in root.placements]
+        xmin, xmax = min(x for x, _y in stones), max(x for x, _y in stones)
+        ymin, ymax = min(y for _x, y in stones), max(y for _x, y in stones)
+        if min(xmin, ymin) > CENTRE_EDGE and xmax < sx - 1 - CENTRE_EDGE and ymax < sy - 1 - CENTRE_EDGE:
+            # an open-centre problem (3 of the 767): the frame walls a corner or side problem off from the rest of
+            # the board, and around the centre its walls have weak points the engine plays at; keep only the region
+            node = root
+            root.problem_region = [max(0, xmin - CENTRE_MARGIN), min(sx - 1, xmax + CENTRE_MARGIN),
+                                   max(0, ymin - CENTRE_MARGIN), min(sy - 1, ymax + CENTRE_MARGIN)]
+        else:
+            node, region = tsumego_frame_from_katrain_game(self.game, self.game.komi, to_play == "B", ko_p=False,
+                                                           margin=FRAME_MARGIN)
+            if region:
+                (x1, x2), (y1, y2) = region
+                root.problem_region = [min(x1, x2), max(x1, x2), min(y1, y2), max(y1, y2)]
+            self.game.set_current_node(node)
         self.learn_start = node
         self.update_player(to_play, player_type=PLAYER_HUMAN, player_subtype=PLAYING_TEACHING)
         self.update_player("W" if to_play == "B" else "B", player_type=PLAYER_AI, player_subtype=AI_DEFAULT)
@@ -104,6 +116,13 @@ class LearnMixin:
         engine = self.game.engines[to_play]
         node.analyze(engine, visits=SOLUTION_VISITS * engine.config["max_visits"], time_limit=False)
         self.update_state(redraw_board=True)
+
+    def learn_reading_done(self):
+        """The start position's deep reading is in (a normal-depth analysis of the same node can finish first)."""
+        start = self.learn_start
+        engine = self.game.engines[start.next_player]
+        visits = (start.analysis.get("root") or {}).get("visits", 0)
+        return start.analysis_complete and visits >= 0.9 * SOLUTION_VISITS * engine.config["max_visits"]
 
     def learn_after_ai_move(self):
         """KaTrain passing in a problem means the local fight is settled: say how the solver did."""
@@ -131,9 +150,13 @@ class LearnMixin:
             self.controls.set_status("Open a problem first (Learn: lessons and problems).", STATUS_INFO,
                                      check_level=False)
             return
-        line = solution_line(start) if start.analysis_complete else []
-        if not line:
+        if not self.learn_reading_done():
             self.controls.set_status("KaTrain is still reading this problem; ask again in a moment.", STATUS_INFO,
+                                     check_level=False)
+            return
+        line = solution_line(start)
+        if not line:
+            self.controls.set_status("KaTrain sees nothing to play here: its best move is to pass.", STATUS_INFO,
                                      check_level=False)
             return
         if self.play_analyze_mode == MODE_PLAY:  # analysis mode, so KaTrain does not answer the moves it shows
@@ -289,10 +312,12 @@ class LearnMixin:
                           flush=True)
                     state["solved"] = True
                 return
-            if os.environ.get("KATRAIN_LEARN_SOLVE") and start.analysis_complete:
+            if os.environ.get("KATRAIN_LEARN_SOLVE") and self.learn_reading_done():
                 self.learn_show_solution()
-                print("[learn] %s (all inside: %s)" % (getattr(self.controls.status, "text", "?"),
-                                                      all(inside(m) for m in solution_line(start))), flush=True)
+                top = start.candidate_moves[0] if start.candidate_moves else {}
+                print("[learn] %s (all inside: %s; region %s, top %s pv %s)" % (
+                    getattr(self.controls.status, "text", "?"), all(inside(m) for m in solution_line(start)), region,
+                    top.get("move"), " ".join(top.get("pv", [])[:8])), flush=True)
                 Clock.schedule_once(finish, 3)
                 return False
             if not os.environ.get("KATRAIN_LEARN_SOLVE") and (state["solved"] or not play):
