@@ -20,6 +20,9 @@ import sys
 import threading
 
 GAME_ID = "katrain"
+# Bumped when the launcher (~/sgl SUN/run_katrain.sh) must replace an older installed fork: it reinstalls while
+# FORK_REV is below the revision it needs. 1: problems as local fights (GO-PROBLEM-1), Sabaki review, shape names.
+FORK_REV = 1
 
 
 def configured():
